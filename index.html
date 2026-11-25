@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <script>
+    // 👇 DÁN BLOCK ID CỦA BỐ VÀO GIỮA HAI DẤU NGOẶC KÉP BÊN DƯỚI 👇
+    const BLOCK_ID = "THAY_BLOCK_ID_CUA_BO";
+    const REWARD_PER_AD = 10; // Số điểm cộng mỗi lần xem xong
+  </script>
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mini App Xem Quảng Cáo</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(160deg, #0d1117, #161d2b);
+      color: #f0f6fc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      width: 100%;
+      max-width: 400px;
+      background: #1c2433;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+      text-align: center;
+    }
+    .user-badge {
+      display: inline-block;
+      background: rgba(46, 166, 255, 0.14);
+      color: #6bc2ff;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      margin-bottom: 14px;
+      font-weight: 600;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+    .desc {
+      margin: 0 0 20px;
+      font-size: 14px;
+      color: #9fb0c7;
+      line-height: 1.45;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .stat-box {
+      background: #121722;
+      border-radius: 14px;
+      padding: 14px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .stat-label {
+      font-size: 12px;
+      color: #8ea1bc;
+      margin-bottom: 6px;
+    }
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    button#watchBtn {
+      width: 100%;
+      padding: 15px 18px;
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+      background: linear-gradient(90deg, #1e88e5, #2ea6ff);
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+    }
+    button#watchBtn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 14px;
+      min-height: 22px;
+      font-size: 14px;
+      color: #a9bdd6;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="user-badge" id="userBadge">Đang tải thông tin...</div>
+    <h1>Xem Quảng Cáo Nhận Điểm</h1>
+    <p class="desc">Bấm nút bên dưới để xem quảng cáo và tích lũy điểm thưởng.</p>
+
+    <div class="stats">
+      <div class="stat-box">
+        <div class="stat-label">Lượt đã xem</div>
+        <div class="stat-value" id="viewsEl">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Điểm hiện có</div>
+        <div class="stat-value" id="pointsEl">0</div>
+      </div>
+    </div>
+
+    <button id="watchBtn" onclick="handleWatchAd()">Xem quảng cáo (+10 điểm)</button>
+    <div class="status" id="statusEl">Sẵn sàng</div>
+  </div>
+
+  <script>
+    const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+    }
+
+    const tgUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user : null;
+    const userId = tgUser ? String(tgUser.id) : "guest";
+    const displayName = tgUser
+      ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ") || ("ID: " + userId)
+      : "Khách (trình duyệt)";
+
+    const storageKey = "tg_ad_miniapp_" + userId;
+    const savedData = JSON.parse(localStorage.getItem(storageKey) || '{"views":0,"points":0}');
+
+    let views = Number(savedData.views) || 0;
+    let points = Number(savedData.points) || 0;
+
+    const userBadgeEl = document.getElementById("userBadge");
+    const viewsEl = document.getElementById("viewsEl");
+    const pointsEl = document.getElementById("pointsEl");
+    const watchBtnEl = document.getElementById("watchBtn");
+    const statusEl = document.getElementById("statusEl");
+
+    userBadgeEl.textContent = "Xin chào, " + displayName;
+    watchBtnEl.textContent = "Xem quảng cáo (+" + REWARD_PER_AD + " điểm)";
+
+    function saveAndRender() {
+      localStorage.setItem(storageKey, JSON.stringify({ views, points }));
+      viewsEl.textContent = views;
+      pointsEl.textContent = points;
+    }
+
+    function showAdProvider() {
+      return new Promise((resolve, reject) => {
+        if (!window.Adsgram) {
+          statusEl.textContent = "Chưa tải được SDK AdsGram.";
+          reject(new Error("Adsgram SDK not loaded"));
+          return;
+        }
+        statusEl.textContent = "Đang mở quảng cáo...";
+        const AdController = window.Adsgram.init({ blockId: BLOCK_ID });
+        AdController.show().then(resolve).catch(reject);
+      });
+    }
+
+    async function handleWatchAd() {
+      watchBtnEl.disabled = true;
+      try {
+        await showAdProvider();
+        views += 1;
+        points += REWARD_PER_AD;
+        saveAndRender();
+        statusEl.textContent = "Hoàn tất! Bạn được +" + REWARD_PER_AD + " điểm.";
+      } catch (e) {
+        statusEl.textContent = "Chưa hoàn tất quảng cáo hoặc chưa có quảng cáo.";
+      } finally {
+        watchBtnEl.disabled = false;
+      }
+    }
+
+    saveAndRender();
+  </script>
+</body>
+</html>
